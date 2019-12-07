@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -43,104 +44,50 @@ func exec(program []int, input int) {
 	for i := 0; i < len(program); i += steps {
 		opcode := program[i]
 
-		if opcode > 99 {
-			opcode, steps = checkForParameterMode(program, opcode, i)
-			// Parameter mode could contain a 99 opcode
-			if opcode == 99 {
-				break
-			}
-		} else {
-			switch opcode {
-			case 1:
-				param1Pos, param2Pos, resPos := findPointers(program, i)
-				program[resPos] = program[param1Pos] + program[param2Pos]
-				steps = 4
-			case 2:
-				param1Pos, param2Pos, resPos := findPointers(program, i)
-				program[resPos] = program[param1Pos] * program[param2Pos]
-				steps = 4
-			case 3:
-				paramPos := program[i+1]
-				program[paramPos] = input
-				steps = 2
-			case 4:
-				paramPos := program[i+1]
-				fmt.Println(program[paramPos])
-				steps = 2
-			case 99:
-				break
-			default:
-				log.Fatalf("Unsupported opcode: %d\n", opcode)
-			}
+		switch opcode % 100 {
+		case 1:
+			param1 := getParam(program, opcode, i, 1)
+			param2 := getParam(program, opcode, i, 2)
+			resPos := program[i+3]
+			program[resPos] = param1 + param2
+			steps = 4
+		case 2:
+			param1 := getParam(program, opcode, i, 1)
+			param2 := getParam(program, opcode, i, 2)
+			resPos := program[i+3]
+			program[resPos] = param1 * param2
+			steps = 4
+		case 3:
+			paramPos := program[i+1]
+			program[paramPos] = input
+			steps = 2
+		case 4:
+			param := getParam(program, opcode, i, 1)
+			fmt.Println(param)
+			steps = 2
+		case 99:
+			return
+		default:
+			log.Fatalf("Unsupported opcode: %d\n", opcode)
 		}
 	}
 }
 
-func findPointers(program []int, instrPointer int) (int, int, int) {
-	param1Pos := program[instrPointer+1]
-	param2Pos := program[instrPointer+2]
-	resPos := program[instrPointer+3]
-	return param1Pos, param2Pos, resPos
+func getParam(program []int, opcode, instrPointer, offset int) int {
+	param := 0
+	if isImmediate(opcode, offset) {
+		param = program[instrPointer+offset]
+	} else {
+		param = program[program[instrPointer+offset]]
+	}
+
+	return param
 }
 
-func checkForParameterMode(program []int, opcode, instrPointer int) (int, int) {
-	split := strings.Split(strconv.Itoa(opcode), "")
-	// Merge the two right-most digit to get the opcode
-	opcode, err := strconv.Atoi(split[len(split)-2] + split[len(split)-1])
-	if err != nil {
-		log.Fatalf("Cannot parse int: %v\n", err)
-	}
-
-	// Corner cases for which parameter mode has no meaning
-	switch opcode {
-	case 4: // Print value and continue
-		paramPos := program[instrPointer+1]
-		fmt.Println(program[paramPos])
-		return 4, 2
-	case 99: // Program will stop
-		return 99, 0
-	}
-
-	val1 := 0
-	val2 := 0
-	switch len(split) {
-	case 3:
-		val1 = chooseMode(split[0], program, instrPointer)
-		// Implied zero, so position mode
-		paramPos := program[instrPointer+2]
-		val2 = program[paramPos]
-	case 4:
-		val1 = chooseMode(split[1], program, instrPointer)
-		val2 = chooseMode(split[0], program, instrPointer)
-	default:
-		log.Fatalf("Unexpected parameters: %v - len: %d\n", split, len(split))
-	}
-
-	resPos := program[instrPointer+3] // Never in immediate mode
-
-	switch opcode {
-	case 1:
-		program[resPos] = val1 + val2
-	case 2:
-		program[resPos] = val1 * val2
-	default:
-		log.Fatalf("Unsupported opcode in parameter mode: %d\n", opcode)
-	}
-
-	return opcode, 4
-}
-
-func chooseMode(mode string, program []int, i int) int {
-	val := 0
-	switch mode {
-	case "1": // Immediate mde
-		val = program[i+1]
-	case "0": // Position mode
-		paramPos := program[i+1]
-		val = program[paramPos]
-	default:
-		log.Fatalf("Unexpected mode: %v\n", mode)
-	}
-
-	return val
+// Pos == 1 --> hundreds
+// Pos == 2 --> thousands
+// Pos == 3 --> tens of thousands
+func isImmediate(opcode, pos int) bool {
+	// Get the unit
+	return opcode/int(math.Pow10(pos+1))%10 == 1
 }
