@@ -21,8 +21,7 @@ func main() {
 	scanner.Scan()
 	program := convertStringToInts(scanner.Text())
 
-	//exec(program, 1)
-	amplify(program)
+	fmt.Println(amplify(program))
 }
 
 func convertStringToInts(str string) []int {
@@ -36,42 +35,92 @@ func convertStringToInts(str string) []int {
 	return ints
 }
 
-func exec(program []int, input int) int {
+func exec(program []int, inputs []int) int {
+	inputPointer := 0
 	output := 0
-	steps := 0
-	for i := 0; i < len(program); i += steps {
-		opcode := program[i]
+	ip := 0
+	for {
+		opcode := program[ip]
 
 		switch opcode % 100 {
 		case 1:
-			param1 := getParam(program, opcode, i, 1)
-			param2 := getParam(program, opcode, i, 2)
-			resPos := program[i+3]
+			param1 := getParam(program, opcode, ip, 1)
+			param2 := getParam(program, opcode, ip, 2)
+			resPos := program[ip+3]
 			program[resPos] = param1 + param2
-			steps = 4
+			ip += 4
 		case 2:
-			param1 := getParam(program, opcode, i, 1)
-			param2 := getParam(program, opcode, i, 2)
-			resPos := program[i+3]
+			param1 := getParam(program, opcode, ip, 1)
+			param2 := getParam(program, opcode, ip, 2)
+			resPos := program[ip+3]
 			program[resPos] = param1 * param2
-			steps = 4
+			ip += 4
 		case 3:
-			paramPos := program[i+1]
-			program[paramPos] = input
-			steps = 2
+			paramPos := program[ip+1]
+			program[paramPos] = inputs[inputPointer]
+			inputPointer++
+			ip += 2
 		case 4:
-			param := getParam(program, opcode, i, 1)
-			fmt.Println(param)
+			param := getParam(program, opcode, ip, 1)
 			output = param
-			steps = 2
+			ip += 2
+		// Opcode 5 is jump-if-true: if the first parameter
+		// is non-zero, it sets the instruction pointer to
+		// the value from the second parameter. Otherwise,
+		// it does nothing.
+		case 5:
+			param1 := getParam(program, opcode, ip, 1)
+			param2 := getParam(program, opcode, ip, 2)
+			if param1 != 0 {
+				ip = param2
+			} else {
+				ip += 3
+			}
+		// Opcode 6 is jump-if-false: if the first parameter
+		// is zero, it sets the instruction pointer to the
+		// value from the second parameter. Otherwise, it does
+		// nothing.
+		case 6:
+			param1 := getParam(program, opcode, ip, 1)
+			param2 := getParam(program, opcode, ip, 2)
+			if param1 == 0 {
+				ip = param2
+			} else {
+				ip += 3
+			}
+		// Opcode 7 is less than: if the first parameter is
+		// less than the second parameter, it stores 1 in the
+		// position given by the third parameter. Otherwise,
+		// it stores 0.
+		case 7:
+			param1 := getParam(program, opcode, ip, 1)
+			param2 := getParam(program, opcode, ip, 2)
+			param3 := program[ip+3]
+			if param1 < param2 {
+				program[param3] = 1
+			} else {
+				program[param3] = 0
+			}
+			ip += 4
+		// Opcode 8 is equals: if the first parameter is equal
+		// to the second parameter, it stores 1 in the position
+		// given by the third parameter. Otherwise, it stores 0.
+		case 8:
+			param1 := getParam(program, opcode, ip, 1)
+			param2 := getParam(program, opcode, ip, 2)
+			param3 := program[ip+3]
+			if param1 == param2 {
+				program[param3] = 1
+			} else {
+				program[param3] = 0
+			}
+			ip += 4
 		case 99:
 			return output
 		default:
 			log.Fatalf("Unsupported opcode: %d\n", opcode)
 		}
 	}
-
-	return -1
 }
 
 func getParam(program []int, opcode, instrPointer, offset int) int {
@@ -93,26 +142,24 @@ func isImmediate(opcode, pos int) bool {
 	return opcode/int(math.Pow10(pos+1))%10 == 1
 }
 
-func amplify(program []int) {
+func amplify(program []int) int {
+	maxSignal := -1
 	phases := []int{0, 1, 2, 3, 4}
 	combinations := permutate(len(phases), phases)
 
 	for _, combination := range combinations {
-		fmt.Println("Phase setting:", combination)
 		param := 0
 		for _, phase := range combination {
-			fmt.Printf("Param: %d\tPhase:%d\n", param, phase)
-			// tmp := make([]int, len(program))
-			// copy(tmp, program)
-
-			// amplifier := []int{phase}
-			// amplifier = append(amplifier, program...)
 			amplifier := make([]int, len(program))
 			copy(amplifier, program)
-			fmt.Println(amplifier)
-			param = exec(amplifier, param)
+			param = exec(amplifier, []int{phase, param})
+			if param > maxSignal {
+				maxSignal = param
+			}
 		}
 	}
+
+	return maxSignal
 }
 
 // Heap's algorithm
